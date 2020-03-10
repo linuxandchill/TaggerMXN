@@ -1,8 +1,39 @@
+import numpy as np
 import time
+import os
+import sys
+import json
+import argparse
+from random import randint
+import urllib
+import logging
+import datetime
+import redis
+import pickle
+
 import cv2
 import gluoncv as gcv
 import mxnet as mx
 from utils import return_tags
+
+
+from azure import *
+from azure.storage.blob import BlockBlobService
+from azure.storage.blob import ContentSettings
+from azure.storage.blob import (
+    BlockBlobService,
+    ContainerPermissions,
+    BlobPermissions
+)
+
+storage_account_name = configData['storage_account_name']
+storage_account_key = configData['storage_account_key']
+storage_container = configData['storage_container']
+
+redisHost= configData['redisHost']
+redisPort= configData['redisPort']
+storage_block_blob_service = BlockBlobService(account_name=storage_account_name, account_key=storage_account_key)
+redisConnection = redis.StrictRedis( host = redisHost, port = redisPort, db = 0)
 
 def tagger(net, video_path, frames_process=1): 
     # Load the video
@@ -50,10 +81,80 @@ def tagger(net, video_path, frames_process=1):
 # Load the model
 #net = gcv.model_zoo.get_model('ssd_512_resnet50_v1_voc', pretrained=True, ctx=mx.gpu(0))
 #net = gcv.model_zoo.get_model('ssd_512_resnet50_v1_coco', pretrained=True, ctx=mx.gpu(0))
-net = gcv.model_zoo.get_model('faster_rcnn_resnet50_v1b_voc', pretrained=True, ctx=mx.gpu(0))
+#net = gcv.model_zoo.get_model('faster_rcnn_resnet50_v1b_voc', pretrained=True, ctx=mx.gpu(0))
 #net = gcv.model_zoo.get_model('faster_rcnn_resnet101_v1d_coco', pretrained=True, ctx=mx.gpu(0))
 
-for i in range(1,5):
-    print(tagger(net, './20-26-20.mp4', 20))
+#for i in range(1,5):
+#    print(tagger(net, './20-26-20.mp4', 20))
 #print(tagger(net, './rickgarage.mp4', 20))
 
+def print_phase_header(message):
+    global COUNTER;
+    print ("\n[" + str("%02d" % int(COUNTER)) + "] >>> " +  message)
+    COUNTER += 1;
+
+def print_phase_message(message):
+    time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print (str(time_stamp) + ": " +  message)
+
+index = 0
+slotId = 0
+
+while ifTrue:
+    if index == 500:
+       break
+    if os.path.isfile("die.txt"):
+       print( "BYE BYE " + str( slotId))
+       break
+    chance=randint(0, 9)
+    if chance == 1:
+        pop=redisConnection.rpop
+    else:
+        pop=redisConnection.lpop
+#nextItemOrig = pop( "indexer_queue_" + suffix)
+#    nextItemOrig = pop( "indexer_queue_" + 'ml')
+    nextItemOrig = pop( "indexer_queue")
+    if nextItemOrig == None or nextItemOrig == '':
+        print_phase_message( "Sleeping, nothing to do...")
+#        break
+        time.sleep(60)
+        continue
+#    index=index + 1
+    nextItem = nextItemOrig.decode("utf-8")
+#    print( "NEXTITEM " + nextItem)
+    if nextItem == None or nextItem=='':
+        print_phase_message( "Sleeping, nothing to do...")
+#        break
+        time.sleep(60)
+        continue
+
+    index=index + 1
+    parts = nextItem.split(":")
+    eventId=parts[0]
+#    eventId = str( int( eventId) + 1)  ####REMOVE
+    videoPath='/'.join( parts[1].split('/')[1:])
+    local_video_path = "./result/" + videoPath.replace("/", "_")
+    videoID = str( eventId) + ":" + videoPath
+    print( "nextItem " + nextItem + "  " + local_video_path)
+    try:
+        downloadBlob=storage_block_blob_service.get_blob_to_path( storage_container, videoPath, local_video_path)
+    except:
+        print( "ERROR DOWNLOADING")
+
+    print( index, eventId, videoPath)
+    try:
+        foundLabels = extractTags(local_video_path, det_graph, tfSession, cat_idx, framesProcess)
+        redisConnection.rpush( "result_queue_ml", videoID )
+        redisConnection.rpush( "ml:result_queue:" + suffix, suffix + ":" + videoID )
+        redisConnection.set( suffix + ":" + videoID, foundLabels, 864000)
+        redisConnection.sadd( "stat_ml_set:" + videoID, suffix)
+        redisConnection.expire( "stat_ml_set:" + videoID, 864000)
+        print( foundLabels)
+    except:
+        print( "ERROR PROCESSING")
+
+    try:
+#    	pass
+        os.remove( local_video_path)
+    except:
+        print( "Removed failed" + local_video_path)
