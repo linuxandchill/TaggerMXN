@@ -35,7 +35,7 @@ redisPort= configData['redisPort']
 storage_block_blob_service = BlockBlobService(account_name=storage_account_name, account_key=storage_account_key)
 redisConnection = redis.StrictRedis( host = redisHost, port = redisPort, db = 0)
 
-def tagger(net, video_path, frames_process=1): 
+def tagger(net, video_path, frames_process=20): 
     # Load the video
     video = cv2.VideoCapture(video_path)
     time.sleep(1) ### letting the camera autofocus
@@ -97,8 +97,14 @@ def print_phase_message(message):
     time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print (str(time_stamp) + ": " +  message)
 
+## Doesn't seem like framesProcess is being passed as argument, hardcoded instead to 20
+ap = argparse.ArgumentParser()
+ap.add_argument("-cf", "--cameraframes", type=int, default=10, help="process every n frames")
+args = vars(ap.parse_args())
+
 index = 0
 slotId = 0
+framesProcess = 20
 
 while ifTrue:
     if index == 500:
@@ -143,7 +149,8 @@ while ifTrue:
 
     print( index, eventId, videoPath)
     try:
-        foundLabels = extractTags(local_video_path, det_graph, tfSession, cat_idx, framesProcess)
+        net = gcv.model_zoo.get_model('faster_rcnn_resnet50_v1b_voc', pretrained=True, ctx=mx.gpu(0))
+        foundLabels = tagger(net, local_video_path, framesProcess)
         redisConnection.rpush( "result_queue_ml", videoID )
         redisConnection.rpush( "ml:result_queue:" + suffix, suffix + ":" + videoID )
         redisConnection.set( suffix + ":" + videoID, foundLabels, 864000)
