@@ -105,6 +105,7 @@ args = vars(ap.parse_args())
 index = 0
 slotId = 0
 framesProcess = 20
+net = gcv.model_zoo.get_model('faster_rcnn_resnet50_v1b_voc', pretrained=True, ctx=mx.gpu(0))
 
 while ifTrue:
     if index == 500:
@@ -149,7 +150,6 @@ while ifTrue:
 
     print( index, eventId, videoPath)
     try:
-        net = gcv.model_zoo.get_model('faster_rcnn_resnet50_v1b_voc', pretrained=True, ctx=mx.gpu(0))
         foundLabels = tagger(net, local_video_path, framesProcess)
         redisConnection.rpush( "result_queue_ml", videoID )
         redisConnection.rpush( "ml:result_queue:" + suffix, suffix + ":" + videoID )
