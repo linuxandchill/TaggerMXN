@@ -36,7 +36,7 @@ def tagger(net, video_path, frames_process=1):
             if ret == False:
                 break
 
-        print("RETURNING FOUND TAG")
+        print("RETURNING FOUND TAGS")
         return found_tags
 
     except Exception as err:
@@ -53,7 +53,7 @@ def tagger(net, video_path, frames_process=1):
 net = gcv.model_zoo.get_model('faster_rcnn_resnet50_v1b_voc', pretrained=True, ctx=mx.gpu(0))
 #net = gcv.model_zoo.get_model('faster_rcnn_resnet101_v1d_coco', pretrained=True, ctx=mx.gpu(0))
 
-#print(tagger(net, './townCenter.mp4', 20))
-for i in range(1,20):
-    print(tagger(net, './rickgarage.mp4', 20))
+for i in range(1,5):
+    print(tagger(net, './20-26-20.mp4', 20))
+#print(tagger(net, './rickgarage.mp4', 20))
 
